@@ -433,7 +433,8 @@ public class ContentDirectoryMonitor implements DirectoryMonitor {
 
         ThreadsDefinition td = routeDefinition.threads(numThreads).process(systemSubjectBinder);
         if (processingMechanism.equals(IN_PLACE)) {
-          td.choice()
+          td.process(new IngestProcessor(monitoredDirectory))
+              .choice()
               .when(
                   simple(
                       "${in.headers.operation} == 'CREATE' || ${in.headers.operation} == 'UPDATE'"))
