@@ -17,6 +17,7 @@ import static org.codice.ddf.catalog.async.data.impl.ProcessResourceImpl.DEFAULT
 import static org.codice.ddf.catalog.async.data.impl.ProcessResourceImpl.DEFAULT_NAME;
 
 import ddf.catalog.resource.Resource;
+import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.URI;
@@ -42,6 +43,8 @@ public class LazyProcessResourceImpl implements ProcessResource {
 
   private InputStream inputStream;
 
+  private byte[] byteArray = null;
+
   private String qualifier;
 
   private boolean isModified = false;
@@ -55,7 +58,7 @@ public class LazyProcessResourceImpl implements ProcessResource {
   /**
    * Creates a {@link ProcessResource} with a {@link Supplier} used to load the {@link Resource}.
    * The resource will not be loaded until the first time one of the following fields is accessed:
-   * inputStream mimeType name
+   * inputStream mimeType name byteArray
    *
    * @param metacardId schema specific part of {@link URI}, throws {@link IllegalArgumentException}
    *     if empty or null
@@ -84,7 +87,7 @@ public class LazyProcessResourceImpl implements ProcessResource {
    * <p>This will load the resource.
    */
   @Override
-  public InputStream getInputStream() throws IOException {
+  public InputStream getInputStream() {
     loadResource();
     return inputStream;
   }
@@ -109,6 +112,21 @@ public class LazyProcessResourceImpl implements ProcessResource {
   public String getName() {
     loadResource();
     return name;
+  }
+
+  /**
+   * {@inheritDoc}
+   *
+   * <p>This will load the resource.
+   */
+  @Override
+  public byte[] getByteArray() throws IOException {
+    loadResource();
+    if (byteArray == null && inputStream != null) {
+      byteArray = IOUtils.toByteArray(inputStream);
+      inputStream = new ByteArrayInputStream(byteArray);
+    }
+    return byteArray;
   }
 
   /**

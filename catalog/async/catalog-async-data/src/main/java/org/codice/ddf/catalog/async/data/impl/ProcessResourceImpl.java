@@ -15,6 +15,7 @@ package org.codice.ddf.catalog.async.data.impl;
 
 import static org.apache.commons.lang.Validate.notNull;
 
+import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.URI;
@@ -41,6 +42,8 @@ public class ProcessResourceImpl implements ProcessResource {
   private long size;
 
   private InputStream inputStream;
+
+  private byte[] byteArray = null;
 
   private String qualifier;
 
@@ -168,7 +171,7 @@ public class ProcessResourceImpl implements ProcessResource {
   }
 
   @Override
-  public InputStream getInputStream() throws IOException {
+  public InputStream getInputStream() {
     return inputStream;
   }
 
@@ -189,5 +192,14 @@ public class ProcessResourceImpl implements ProcessResource {
 
   public void markAsModified() {
     isModified = true;
+  }
+
+  @Override
+  public byte[] getByteArray() throws IOException {
+    if (byteArray == null && inputStream != null) {
+      byteArray = IOUtils.toByteArray(inputStream);
+      inputStream = new ByteArrayInputStream(byteArray);
+    }
+    return byteArray;
   }
 }

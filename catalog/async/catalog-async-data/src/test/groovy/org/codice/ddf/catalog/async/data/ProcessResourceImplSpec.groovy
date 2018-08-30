@@ -13,6 +13,7 @@
  */
 package org.codice.ddf.catalog.async.data
 
+import org.apache.commons.io.IOUtils
 import org.codice.ddf.catalog.async.data.api.internal.ProcessResource
 import org.codice.ddf.catalog.async.data.impl.ProcessResourceImpl
 import spock.lang.Specification
@@ -22,6 +23,10 @@ class ProcessResourceImplSpec extends Specification {
     static final ID = 'id'
 
     def inputStream = Mock(InputStream)
+
+    byte[] testBytes = "Hello World".getBytes()
+
+    InputStream testBytesStream = new ByteArrayInputStream(testBytes)
 
     static final MIME_TYPE = "mimeType"
 
@@ -168,4 +173,53 @@ class ProcessResourceImplSpec extends Specification {
         then:
         thrown IllegalArgumentException
     }
+
+    def 'test process resource getByteArray validity'(){
+        def processResource = new ProcessResourceImpl(ID, testBytesStream, MIME_TYPE, RESOURCE_NAME, SIZE)
+
+        expect:
+        processResource.getByteArray() == processResource.getByteArray()
+    }
+
+    def 'test process resource getByteArray does not return null'(){
+        def processResource = new ProcessResourceImpl(ID, testBytesStream, MIME_TYPE, RESOURCE_NAME, SIZE)
+
+        expect:
+        processResource.getByteArray() != null
+    }
+
+    def 'test process resource getByteArray does not return null with multiple calls'(){
+        def processResource = new ProcessResourceImpl(ID, testBytesStream, MIME_TYPE, RESOURCE_NAME, SIZE)
+        processResource.getByteArray()
+
+        expect:
+        processResource.getByteArray() != null
+    }
+
+    def 'tset process resource getByteArray does not create a null input stream'(){
+        def processResource = new ProcessResourceImpl(ID, testBytesStream, MIME_TYPE, RESOURCE_NAME, SIZE)
+        processResource.getByteArray()
+
+        expect:
+        processResource.getInputStream() != null
+    }
+
+    def 'test process resource getByteArray bytes equal input stream bytes'(){
+        def processResource = new ProcessResourceImpl(ID, testBytesStream, MIME_TYPE, RESOURCE_NAME, SIZE)
+
+        expect:
+        processResource.getByteArray() == testBytes
+    }
+
+    def 'test process resource input stream bytes after getByteArray equal source bytes'(){
+        def processResource = new ProcessResourceImpl(ID, testBytesStream, MIME_TYPE, RESOURCE_NAME, SIZE)
+
+        when:
+        processResource.getByteArray()
+        InputStream is = processResource.getInputStream()
+
+        then:
+        IOUtils.toByteArray(is) == testBytes
+    }
+
 }

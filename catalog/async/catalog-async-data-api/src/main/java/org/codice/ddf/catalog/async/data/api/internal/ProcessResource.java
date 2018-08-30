@@ -63,6 +63,12 @@ public interface ProcessResource {
   /**
    * Return the input stream containing the {@link ProcessResource}'s actual data content.
    *
+   * <p>Note that the binary from the <code>InputStream</code> can only be accessed once. Thus, when
+   * you call {@link #getInputStream()} and retrieve the <code>InputStream</code> object, it can
+   * only be used once to extract the content. If the bytes of the <code>
+   * InputStream</code> object are needed more than once, use the {@link #getByteArray()} method
+   * instead.
+   *
    * @return the {@link ProcessResource}'s input stream
    * @throws IOException if the input stream is not available
    */
@@ -93,4 +99,16 @@ public interface ProcessResource {
    * <p>Look into having the ProcessResource implement InputStream
    */
   void close();
+
+  /**
+   * Convenience method to attempt to read the contents of the <code>InputStream</code> into a
+   * <code>byte</code> array.
+   *
+   * <p>Note that {@link #getByteArray()} should be idempotent if {@link #getInputStream()} has not
+   * been initially invoked.
+   *
+   * @return byte[]
+   * @throws IOException if the stream can not be read into the array
+   */
+  byte[] getByteArray() throws IOException;
 }

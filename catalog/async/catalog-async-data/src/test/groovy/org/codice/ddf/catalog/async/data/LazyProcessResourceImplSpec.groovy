@@ -18,8 +18,8 @@ import org.codice.ddf.catalog.async.data.api.internal.InaccessibleResourceExcept
 import org.codice.ddf.catalog.async.data.impl.LazyProcessResourceImpl
 import spock.lang.Shared
 import spock.lang.Specification
-
 import java.util.function.Supplier
+import org.apache.commons.io.IOUtils
 
 import static org.codice.ddf.catalog.async.data.impl.ProcessResourceImpl.*
 
@@ -32,13 +32,14 @@ class LazyProcessResourceImplSpec extends Specification {
     int RESOURCE_SIZE = 1
 
     @Shared
-    InputStream RESOURCE_INPUTSTREAM = Mock(InputStream)
-
-    @Shared
     String RESOURCE_MIMETYPE = "mimeType"
 
     @Shared
     String METACARD_ID = "metacardId"
+
+    byte[] testBytes = "Test String".getBytes()
+
+    InputStream RESOURCE_INPUTSTREAM = new ByteArrayInputStream(testBytes)
 
     private Resource resource
 
@@ -304,4 +305,53 @@ class LazyProcessResourceImplSpec extends Specification {
         then:
         lazyProcessResource.modified
     }
+
+    def 'test process resource getByteArray validity'(){
+        def processResource = new LazyProcessResourceImpl(METACARD_ID, supplier)
+
+        expect:
+        processResource.getByteArray() == processResource.getByteArray()
+    }
+
+    def 'test process resource getByteArray does not return null'(){
+        def processResource = new LazyProcessResourceImpl(METACARD_ID, supplier)
+
+        expect:
+        processResource.getByteArray() != null
+    }
+
+    def 'test process resource getByteArray does not return null with multiple calls'(){
+        def processResource = new LazyProcessResourceImpl(METACARD_ID, supplier)
+        processResource.getByteArray()
+
+        expect:
+        processResource.getByteArray() != null
+    }
+
+    def 'tset process resource getByteArray does not create a null input stream'(){
+        def processResource = new LazyProcessResourceImpl(METACARD_ID, supplier)
+        processResource.getByteArray()
+
+        expect:
+        processResource.getInputStream() != null
+    }
+
+    def 'test process resource getByteArray bytes equals input stream bytes'(){
+        def processResource = new LazyProcessResourceImpl(METACARD_ID, supplier)
+
+        expect:
+        processResource.getByteArray() == testBytes
+    }
+
+    def 'test process resource input stream bytes after getByteArray equal source bytes'(){
+        def processResource = new LazyProcessResourceImpl(METACARD_ID, supplier)
+
+        when:
+        processResource.getByteArray()
+        byte[] processResourceInputStreamBytes = IOUtils.toByteArray(processResource.getInputStream())
+
+        then:
+        processResourceInputStreamBytes == testBytes
+    }
+
 }
