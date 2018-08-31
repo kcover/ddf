@@ -62,7 +62,7 @@ public class ProcessResourceImpl implements ProcessResource {
    */
   public ProcessResourceImpl(
       String metacardId,
-      InputStream inputStream,
+      @Nullable InputStream inputStream,
       @Nullable String mimeType,
       @Nullable String name) {
     this(metacardId, inputStream, mimeType, name, UNKNOWN_SIZE, "");
@@ -83,7 +83,7 @@ public class ProcessResourceImpl implements ProcessResource {
    */
   public ProcessResourceImpl(
       String metacardId,
-      InputStream inputStream,
+      @Nullable InputStream inputStream,
       @Nullable String mimeType,
       @Nullable String name,
       long size) {
@@ -106,7 +106,7 @@ public class ProcessResourceImpl implements ProcessResource {
    */
   public ProcessResourceImpl(
       String metacardId,
-      InputStream inputStream,
+      @Nullable InputStream inputStream,
       String mimeType,
       @Nullable String name,
       long size,
@@ -196,9 +196,13 @@ public class ProcessResourceImpl implements ProcessResource {
 
   @Override
   public byte[] getByteArray() throws IOException {
-    if (byteArray == null && inputStream != null) {
+    if (byteArray == null){
+      if(inputStream != null) {
       byteArray = IOUtils.toByteArray(inputStream);
       inputStream = new ByteArrayInputStream(byteArray);
+      } else{
+        throw new IOException(String.format("Could not retrieve byte array for %s because input stream was null", name));
+      }
     }
     return byteArray;
   }

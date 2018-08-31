@@ -69,7 +69,7 @@ public interface ProcessResource {
    * InputStream</code> object are needed more than once, use the {@link #getByteArray()} method
    * instead.
    *
-   * @return the {@link ProcessResource}'s input stream
+   * @return the {@link ProcessResource}'s input stream or <code>null</code> if none was given
    * @throws IOException if the input stream is not available
    */
   InputStream getInputStream() throws IOException;
@@ -107,7 +107,7 @@ public interface ProcessResource {
    * <p>Note that {@link #getByteArray()} should be idempotent if {@link #getInputStream()} has not
    * been initially invoked.
    *
-   * @return byte[]
+   * @return byte[] representation of the input stream
    * @throws IOException if the stream can not be read into the array
    */
   byte[] getByteArray() throws IOException;
