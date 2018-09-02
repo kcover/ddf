@@ -14,6 +14,7 @@
 package org.codice.ddf.catalog.async.data
 
 import ddf.catalog.resource.Resource
+import org.apache.commons.io.IOUtils
 import org.codice.ddf.catalog.async.data.api.internal.InaccessibleResourceException
 import org.codice.ddf.catalog.async.data.impl.LazyProcessResourceImpl
 import spock.lang.Shared
@@ -31,8 +32,9 @@ class LazyProcessResourceImplSpec extends Specification {
     @Shared
     int RESOURCE_SIZE = 1
 
-    @Shared
-    InputStream RESOURCE_INPUTSTREAM = Mock(InputStream)
+    byte[] inputStreamBytes = "Test Stream".getBytes()
+
+    InputStream RESOURCE_INPUTSTREAM = new ByteArrayInputStream(inputStreamBytes)
 
     @Shared
     String RESOURCE_MIMETYPE = "mimeType"
@@ -101,7 +103,7 @@ class LazyProcessResourceImplSpec extends Specification {
         lazyProcessResource.uri == expectedUri
         lazyProcessResource.qualifier == expectedQualifier
         lazyProcessResource.name == RESOURCE_NAME
-        lazyProcessResource.inputStream == RESOURCE_INPUTSTREAM
+        IOUtils.toByteArray(lazyProcessResource.inputStream) == inputStreamBytes
         lazyProcessResource.mimeType == RESOURCE_MIMETYPE
         !lazyProcessResource.modified
     }
@@ -303,5 +305,47 @@ class LazyProcessResourceImplSpec extends Specification {
 
         then:
         lazyProcessResource.modified
+    }
+
+    def 'test getInputStream()'(){
+        def lazyProcessResource = new LazyProcessResourceImpl(METACARD_ID, supplier)
+
+        expect:
+        IOUtils.toByteArray(lazyProcessResource.getInputStream()) == inputStreamBytes
+    }
+
+    def 'input stream can be loaded multiple times'(){
+        def lazyProcessResource = new LazyProcessResourceImpl(METACARD_ID, supplier)
+
+        when:
+        def is1 = lazyProcessResource.getInputStream()
+        def is2 = lazyProcessResource.getInputStream()
+        def is3 = lazyProcessResource.getInputStream()
+
+        then:
+        byte[] is1Bytes = IOUtils.toByteArray(is1)
+        is1Bytes == IOUtils.toByteArray(is2)
+        is1Bytes == IOUtils.toByteArray(is3)
+    }
+
+    def 'IOException thrown when getInputStream is called but input stream is null'(){
+        def nullInputStreamResource = Mock(Resource) {
+            getSize() >> RESOURCE_SIZE
+            getInputStream() >> null
+            getName() >> RESOURCE_NAME
+            getMimeTypeValue() >> RESOURCE_MIMETYPE
+        }
+
+        Supplier<Resource> nullInputStreamResourceSupplier = Mock(Supplier) {
+            get() >> nullInputStreamResource
+        }
+
+        def lazyProcessResource = new LazyProcessResourceImpl(METACARD_ID, nullInputStreamResourceSupplier)
+
+        when:
+        lazyProcessResource.getInputStream()
+
+        then:
+        thrown(IOException)
     }
 }

@@ -13,6 +13,7 @@
  */
 package org.codice.ddf.catalog.async.data
 
+import org.apache.commons.io.IOUtils
 import org.codice.ddf.catalog.async.data.api.internal.ProcessResource
 import org.codice.ddf.catalog.async.data.impl.ProcessResourceImpl
 import spock.lang.Specification
@@ -21,7 +22,9 @@ class ProcessResourceImplSpec extends Specification {
 
     static final ID = 'id'
 
-    def inputStream = Mock(InputStream)
+    byte[] inputStreamBytes = "Test Stream".getBytes()
+
+    def inputStream = new ByteArrayInputStream(inputStreamBytes)
 
     static final MIME_TYPE = "mimeType"
 
@@ -42,7 +45,7 @@ class ProcessResourceImplSpec extends Specification {
         processResource.getQualifier() == ''
 
         processResource.isModified()
-        processResource.inputStream == inputStream
+        IOUtils.toByteArray(processResource.getInputStream()) == inputStreamBytes
         processResource.getUri().toString() == RESOURCE_URI
         processResource.getUri().getSchemeSpecificPart() == ID
         processResource.getMimeType() == MIME_TYPE
@@ -59,7 +62,7 @@ class ProcessResourceImplSpec extends Specification {
 
         processResource.getQualifier() == ''
         processResource.isModified()
-        processResource.inputStream == inputStream
+        IOUtils.toByteArray(processResource.getInputStream()) == inputStreamBytes
         processResource.getUri().toString() == RESOURCE_URI
         processResource.getUri().getSchemeSpecificPart() == ID
         processResource.getMimeType() == MIME_TYPE
@@ -73,7 +76,7 @@ class ProcessResourceImplSpec extends Specification {
         processResource.getQualifier() == ''
         !processResource.isModified()
 
-        processResource.inputStream == inputStream
+        IOUtils.toByteArray(processResource.getInputStream()) == inputStreamBytes
         processResource.getUri().toString() == RESOURCE_URI
         processResource.getUri().getSchemeSpecificPart() == ID
         processResource.getMimeType() == MIME_TYPE
@@ -93,23 +96,21 @@ class ProcessResourceImplSpec extends Specification {
 
     def 'test ProcessResourceImpl(String, InputStream, String, String, Int, String, Boolean)'() {
         when:
-        def stream = Mock(InputStream)
-        def processResource = new ProcessResourceImpl(ID, stream, MIME_TYPE, RESOURCE_NAME, SIZE, QUALIFIER)
+        def processResource = new ProcessResourceImpl(ID, inputStream, MIME_TYPE, RESOURCE_NAME, SIZE, QUALIFIER)
 
         then:
         assert processResource.getQualifier() == QUALIFIER
         assert !processResource.isModified()
         assert processResource.getName() == RESOURCE_NAME
         assert processResource.getMimeType() == MIME_TYPE
-        assert processResource.getInputStream() == stream
+        assert IOUtils.toByteArray(processResource.getInputStream()) == inputStreamBytes
         assert processResource.getSize() == SIZE
         assert processResource.getUri().toString() == RESOURCE_URI + "#" + QUALIFIER
     }
 
     def 'test process resource ProcessResourceImpl null qualifier'() {
         when:
-        def stream = Mock(InputStream)
-        def processResource = new ProcessResourceImpl(ID, stream, MIME_TYPE, RESOURCE_NAME, SIZE, null)
+        def processResource = new ProcessResourceImpl(ID, inputStream, MIME_TYPE, RESOURCE_NAME, SIZE, null)
 
         then:
         assert processResource.getUri().toString() == RESOURCE_URI
@@ -118,14 +119,13 @@ class ProcessResourceImplSpec extends Specification {
         assert !processResource.isModified()
         assert processResource.getName() == RESOURCE_NAME
         assert processResource.getMimeType() == MIME_TYPE
-        assert processResource.getInputStream() == stream
+        assert IOUtils.toByteArray(processResource.getInputStream()) == inputStreamBytes
         assert processResource.getSize() == SIZE
     }
 
     def 'test process resource ProcessResourceImpl null mimeType and null fileName'() {
         when:
-        def stream = Mock(InputStream)
-        def processResource = new ProcessResourceImpl(ID, stream, null, null, SIZE, QUALIFIER)
+        def processResource = new ProcessResourceImpl(ID, inputStream, null, null, SIZE, QUALIFIER)
 
         then:
         assert processResource.getName() == ProcessResourceImpl.DEFAULT_NAME
@@ -133,7 +133,7 @@ class ProcessResourceImplSpec extends Specification {
 
         assert processResource.getQualifier() == QUALIFIER
         assert !processResource.isModified()
-        assert processResource.getInputStream() == stream
+        assert IOUtils.toByteArray(processResource.getInputStream()) == inputStreamBytes
         assert processResource.getSize() == SIZE
     }
 
@@ -168,4 +168,26 @@ class ProcessResourceImplSpec extends Specification {
         then:
         thrown IllegalArgumentException
     }
+
+    def 'test getInputStream()'(){
+        def ProcessResource = new ProcessResourceImpl(ID, inputStream, MIME_TYPE, RESOURCE_NAME, SIZE, QUALIFIER)
+
+        expect:
+        IOUtils.toByteArray(ProcessResource.getInputStream()) == inputStreamBytes
+    }
+
+    def 'input stream can be loaded multiple times'(){
+        def ProcessResource = new ProcessResourceImpl(ID, inputStream, MIME_TYPE, RESOURCE_NAME, SIZE, QUALIFIER)
+
+        when:
+        def is1 = ProcessResource.getInputStream()
+        def is2 = ProcessResource.getInputStream()
+        def is3 = ProcessResource.getInputStream()
+
+        then:
+        byte[] is1Bytes = IOUtils.toByteArray(is1)
+        is1Bytes == IOUtils.toByteArray(is2)
+        is1Bytes == IOUtils.toByteArray(is3)
+    }
+
 }

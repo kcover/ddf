@@ -25,6 +25,7 @@ import org.apache.commons.io.IOUtils;
 import org.apache.commons.lang.StringUtils;
 import org.codice.ddf.catalog.async.data.api.internal.InaccessibleResourceException;
 import org.codice.ddf.catalog.async.data.api.internal.ProcessResource;
+import org.codice.ddf.platform.util.TemporaryFileBackedOutputStream;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -41,6 +42,8 @@ public class LazyProcessResourceImpl implements ProcessResource {
   private long size = UNKNOWN_SIZE;
 
   private InputStream inputStream;
+
+  private TemporaryFileBackedOutputStream inputStreamDataCache;
 
   private String qualifier;
 
@@ -86,7 +89,16 @@ public class LazyProcessResourceImpl implements ProcessResource {
   @Override
   public InputStream getInputStream() throws IOException {
     loadResource();
-    return inputStream;
+    if (inputStreamDataCache == null) {
+      if (inputStream == null) {
+        throw new IOException(String.format("Tried to get input stream for %s but was null", name));
+      }
+      inputStreamDataCache = new TemporaryFileBackedOutputStream(32 * 1024);
+      IOUtils.copyLarge(inputStream, inputStreamDataCache);
+      IOUtils.closeQuietly(inputStream);
+    }
+
+    return inputStreamDataCache.asByteSource().openStream();
   }
 
   /**
@@ -160,7 +172,7 @@ public class LazyProcessResourceImpl implements ProcessResource {
 
   @Override
   public void close() {
-    IOUtils.closeQuietly(inputStream);
+    IOUtils.closeQuietly(inputStreamDataCache);
   }
 
   public void markAsModified() {

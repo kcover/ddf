@@ -23,6 +23,7 @@ import javax.annotation.Nullable;
 import org.apache.commons.io.IOUtils;
 import org.apache.commons.lang.StringUtils;
 import org.codice.ddf.catalog.async.data.api.internal.ProcessResource;
+import org.codice.ddf.platform.util.TemporaryFileBackedOutputStream;
 
 public class ProcessResourceImpl implements ProcessResource {
 
@@ -42,6 +43,8 @@ public class ProcessResourceImpl implements ProcessResource {
 
   private InputStream inputStream;
 
+  private TemporaryFileBackedOutputStream inputStreamDataCache;
+
   private String qualifier;
 
   private boolean isModified;
@@ -52,7 +55,8 @@ public class ProcessResourceImpl implements ProcessResource {
    *
    * @param metacardId schema specific part of {@link URI}, throws {@link IllegalArgumentException}
    *     if empty or null
-   * @param inputStream {@link InputStream} of the {@link ProcessResource}, can be null
+   * @param inputStream {@link InputStream} of the {@link ProcessResource}, throws {@link
+   *     IllegalArgumentException} if null
    * @param mimeType mime type of the {@link ProcessResource}, defaults to {@link
    *     #DEFAULT_MIME_TYPE}
    * @param name name of the {@link ProcessResource}, defaults to {@link #DEFAULT_NAME}
@@ -71,7 +75,8 @@ public class ProcessResourceImpl implements ProcessResource {
    *
    * @param metacardId schema specific part of {@link URI}, throws {@link IllegalArgumentException}
    *     if empty or null
-   * @param inputStream {@link InputStream} of the {@link ProcessResource}, can be null
+   * @param inputStream {@link InputStream} of the {@link ProcessResource}, throws {@link
+   *     IllegalArgumentException} if null
    * @param mimeType mime type of the {@link ProcessResource}, defaults to {@link
    *     #DEFAULT_MIME_TYPE}
    * @param name name of the {@link ProcessResource}, defaults to {@link #DEFAULT_NAME}
@@ -92,7 +97,8 @@ public class ProcessResourceImpl implements ProcessResource {
    *
    * @param metacardId schema specific part of {@link URI}, throws {@link IllegalArgumentException}
    *     if empty or null
-   * @param inputStream {@link InputStream} of the {@link ProcessResource}, can be null
+   * @param inputStream {@link InputStream} of the {@link ProcessResource}, throws {@link
+   *     IllegalArgumentException} if null
    * @param mimeType mime type of the {@link ProcessResource}, defaults to {@link
    *     #DEFAULT_MIME_TYPE}
    * @param name name of the {@link ProcessResource}, defaults to {@link #DEFAULT_NAME}
@@ -169,7 +175,13 @@ public class ProcessResourceImpl implements ProcessResource {
 
   @Override
   public InputStream getInputStream() throws IOException {
-    return inputStream;
+    if (inputStreamDataCache == null) {
+      inputStreamDataCache = new TemporaryFileBackedOutputStream(32 * 1024);
+      IOUtils.copyLarge(inputStream, inputStreamDataCache);
+      IOUtils.closeQuietly(inputStream);
+    }
+
+    return inputStreamDataCache.asByteSource().openStream();
   }
 
   @Override
@@ -184,7 +196,7 @@ public class ProcessResourceImpl implements ProcessResource {
 
   @Override
   public void close() {
-    IOUtils.closeQuietly(inputStream);
+    IOUtils.closeQuietly(inputStreamDataCache);
   }
 
   public void markAsModified() {
