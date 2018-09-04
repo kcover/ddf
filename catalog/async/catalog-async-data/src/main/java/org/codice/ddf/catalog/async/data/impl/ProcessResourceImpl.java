@@ -15,6 +15,7 @@ package org.codice.ddf.catalog.async.data.impl;
 
 import static org.apache.commons.lang.Validate.notNull;
 
+import com.google.common.io.Closer;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.URI;
@@ -44,6 +45,8 @@ public class ProcessResourceImpl implements ProcessResource {
   private InputStream inputStream;
 
   private TemporaryFileBackedOutputStream inputStreamDataCache;
+
+  private Closer streamCloser;
 
   private String qualifier;
 
@@ -128,6 +131,8 @@ public class ProcessResourceImpl implements ProcessResource {
     this.qualifier = qualifier == null ? "" : qualifier;
     this.inputStream = inputStream;
     this.size = size;
+    this.streamCloser = Closer.create();
+    streamCloser.register(inputStream);
 
     if (StringUtils.isNotBlank(name)) {
       this.name = name;
@@ -174,14 +179,16 @@ public class ProcessResourceImpl implements ProcessResource {
   }
 
   @Override
-  public InputStream getInputStream() throws IOException {
+  public synchronized InputStream getInputStream() throws IOException {
     if (inputStreamDataCache == null) {
       inputStreamDataCache = new TemporaryFileBackedOutputStream(32 * 1024);
       IOUtils.copyLarge(inputStream, inputStreamDataCache);
-      IOUtils.closeQuietly(inputStream);
+      streamCloser.register(inputStreamDataCache);
     }
+    InputStream newInputStream = inputStreamDataCache.asByteSource().openStream();
+    streamCloser.register(newInputStream);
 
-    return inputStreamDataCache.asByteSource().openStream();
+    return newInputStream;
   }
 
   @Override
@@ -195,8 +202,11 @@ public class ProcessResourceImpl implements ProcessResource {
   }
 
   @Override
-  public void close() {
-    IOUtils.closeQuietly(inputStreamDataCache);
+  public synchronized void close() {
+    try {
+      streamCloser.close();
+    } catch (IOException e) {
+    } // suppress exceptions
   }
 
   public void markAsModified() {

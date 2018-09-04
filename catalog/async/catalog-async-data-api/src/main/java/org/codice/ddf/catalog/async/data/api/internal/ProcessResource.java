@@ -61,12 +61,11 @@ public interface ProcessResource {
   String getMimeType();
 
   /**
-   * Return an input stream containing the {@link ProcessResource}'s actual data content. When this
-   * method is called it creates a {@code TemporaryFileBackedOutputStream} so that it can produce a
-   * new input stream with each call. {@link #close()} should be called once new input streams are
-   * no longer needed.
+   * Returns a new, independent input stream with each call containing the {@link ProcessResource}'s
+   * actual data content. {@link #close()} should be called once new input streams are no longer
+   * needed.
    *
-   * @return a copy of the {@link ProcessResource}'s input stream
+   * @return a new, independent input stream containing the {@link ProcessResource}'s data content.
    * @throws IOException if the input stream is not available
    */
   InputStream getInputStream() throws IOException;
@@ -91,8 +90,9 @@ public interface ProcessResource {
   boolean isModified();
 
   /**
-   * close the {@code TemporaryFileBackedOutputStream} that stores the resource data. Once this is
-   * closed {@link #getInputStream()} will no longer return valid input streams.
+   * close the source of the {@link ProcessResource}'s input stream data. Once this is closed {@link
+   * #getInputStream()} will no longer return valid input streams and any existing input streams
+   * retrieved from this {@link ProcessResource} will no longer be usable.
    */
   void close();
 }

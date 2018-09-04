@@ -16,6 +16,7 @@ package org.codice.ddf.catalog.async.data.impl;
 import static org.codice.ddf.catalog.async.data.impl.ProcessResourceImpl.DEFAULT_MIME_TYPE;
 import static org.codice.ddf.catalog.async.data.impl.ProcessResourceImpl.DEFAULT_NAME;
 
+import com.google.common.io.Closer;
 import ddf.catalog.resource.Resource;
 import java.io.IOException;
 import java.io.InputStream;
@@ -33,6 +34,8 @@ public class LazyProcessResourceImpl implements ProcessResource {
 
   private static final Logger LOGGER = LoggerFactory.getLogger(LazyProcessResourceImpl.class);
 
+  private static final int FILE_BACKED_OUTPUT_STREAM_THRESHOLD = 32 * 1024; // 32 kilobytes
+
   private URI uri;
 
   private String name = DEFAULT_NAME;
@@ -44,6 +47,8 @@ public class LazyProcessResourceImpl implements ProcessResource {
   private InputStream inputStream;
 
   private TemporaryFileBackedOutputStream inputStreamDataCache;
+
+  private Closer streamCloser;
 
   private String qualifier;
 
@@ -87,18 +92,21 @@ public class LazyProcessResourceImpl implements ProcessResource {
    * <p>This will load the resource.
    */
   @Override
-  public InputStream getInputStream() throws IOException {
+  public synchronized InputStream getInputStream() throws IOException {
     loadResource();
     if (inputStreamDataCache == null) {
       if (inputStream == null) {
         throw new IOException(String.format("Tried to get input stream for %s but was null", name));
       }
-      inputStreamDataCache = new TemporaryFileBackedOutputStream(32 * 1024);
+      inputStreamDataCache =
+          new TemporaryFileBackedOutputStream(FILE_BACKED_OUTPUT_STREAM_THRESHOLD);
       IOUtils.copyLarge(inputStream, inputStreamDataCache);
-      IOUtils.closeQuietly(inputStream);
+      streamCloser.register(inputStreamDataCache);
     }
+    InputStream newInputStream = inputStreamDataCache.asByteSource().openStream();
+    streamCloser.register(newInputStream);
 
-    return inputStreamDataCache.asByteSource().openStream();
+    return newInputStream;
   }
 
   /**
@@ -171,8 +179,13 @@ public class LazyProcessResourceImpl implements ProcessResource {
   }
 
   @Override
-  public void close() {
-    IOUtils.closeQuietly(inputStreamDataCache);
+  public synchronized void close() {
+    try {
+      if (streamCloser != null) {
+        streamCloser.close();
+      }
+    } catch (IOException e) {
+    } // suppress exceptions
   }
 
   public void markAsModified() {
@@ -199,6 +212,8 @@ public class LazyProcessResourceImpl implements ProcessResource {
     }
 
     this.inputStream = resource.getInputStream();
+    this.streamCloser = Closer.create();
+    streamCloser.register(inputStream);
 
     if (this.size == UNKNOWN_SIZE) {
       this.size = resource.getSize();
