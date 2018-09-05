@@ -307,7 +307,7 @@ class LazyProcessResourceImplSpec extends Specification {
         lazyProcessResource.modified
     }
 
-    def 'test getInputStream()'(){
+    def 'test getInputStream'(){
         def lazyProcessResource = new LazyProcessResourceImpl(METACARD_ID, supplier)
 
         expect:
@@ -341,6 +341,18 @@ class LazyProcessResourceImplSpec extends Specification {
         }
 
         def lazyProcessResource = new LazyProcessResourceImpl(METACARD_ID, nullInputStreamResourceSupplier)
+
+        when:
+        lazyProcessResource.getInputStream()
+
+        then:
+        thrown(IOException)
+    }
+
+    def 'IOException is thrown when getInputStream is called after close' () {
+        def lazyProcessResource = new LazyProcessResourceImpl(METACARD_ID, supplier)
+        lazyProcessResource.getInputStream()
+        lazyProcessResource.close()
 
         when:
         lazyProcessResource.getInputStream()

@@ -38,15 +38,15 @@ public class LazyProcessResourceImpl implements ProcessResource {
 
   private URI uri;
 
-  private String name = DEFAULT_NAME;
+  private volatile String name = DEFAULT_NAME;
 
-  private String mimeType = DEFAULT_MIME_TYPE;
+  private volatile String mimeType = DEFAULT_MIME_TYPE;
 
-  private long size = UNKNOWN_SIZE;
+  private volatile long size = UNKNOWN_SIZE;
 
   private InputStream inputStream;
 
-  private TemporaryFileBackedOutputStream inputStreamDataCache;
+  private TemporaryFileBackedOutputStream resourceDataCache;
 
   private Closer streamCloser;
 
@@ -94,16 +94,16 @@ public class LazyProcessResourceImpl implements ProcessResource {
   @Override
   public synchronized InputStream getInputStream() throws IOException {
     loadResource();
-    if (inputStreamDataCache == null) {
+    if (resourceDataCache == null) {
       if (inputStream == null) {
         throw new IOException(String.format("Tried to get input stream for %s but was null", name));
       }
-      inputStreamDataCache =
-          new TemporaryFileBackedOutputStream(FILE_BACKED_OUTPUT_STREAM_THRESHOLD);
-      IOUtils.copyLarge(inputStream, inputStreamDataCache);
-      streamCloser.register(inputStreamDataCache);
+      resourceDataCache = new TemporaryFileBackedOutputStream(FILE_BACKED_OUTPUT_STREAM_THRESHOLD);
+      IOUtils.copyLarge(inputStream, resourceDataCache);
+      IOUtils.closeQuietly(inputStream);
+      streamCloser.register(resourceDataCache);
     }
-    InputStream newInputStream = inputStreamDataCache.asByteSource().openStream();
+    InputStream newInputStream = resourceDataCache.asByteSource().openStream();
     streamCloser.register(newInputStream);
 
     return newInputStream;
@@ -180,25 +180,20 @@ public class LazyProcessResourceImpl implements ProcessResource {
 
   @Override
   public synchronized void close() {
-    try {
-      if (streamCloser != null) {
-        streamCloser.close();
-      }
-    } catch (IOException e) {
-    } // suppress exceptions
+    IOUtils.closeQuietly(streamCloser);
   }
 
   public void markAsModified() {
     isModified = true;
   }
 
-  private void loadResource() {
+  private synchronized void loadResource() {
     if (!isResourceLoaded) {
       populateProcessResource(resourceSupplier.get());
     }
   }
 
-  private void populateProcessResource(Resource resource) {
+  private synchronized void populateProcessResource(Resource resource) {
     if (resource == null) {
       String message =
           "Error loading resource for metacard id: "
@@ -213,7 +208,6 @@ public class LazyProcessResourceImpl implements ProcessResource {
 
     this.inputStream = resource.getInputStream();
     this.streamCloser = Closer.create();
-    streamCloser.register(inputStream);
 
     if (this.size == UNKNOWN_SIZE) {
       this.size = resource.getSize();

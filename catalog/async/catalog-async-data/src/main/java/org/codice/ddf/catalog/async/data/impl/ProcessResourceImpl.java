@@ -44,7 +44,7 @@ public class ProcessResourceImpl implements ProcessResource {
 
   private InputStream inputStream;
 
-  private TemporaryFileBackedOutputStream inputStreamDataCache;
+  private TemporaryFileBackedOutputStream resourceDataCache;
 
   private Closer streamCloser;
 
@@ -132,7 +132,6 @@ public class ProcessResourceImpl implements ProcessResource {
     this.inputStream = inputStream;
     this.size = size;
     this.streamCloser = Closer.create();
-    streamCloser.register(inputStream);
 
     if (StringUtils.isNotBlank(name)) {
       this.name = name;
@@ -180,12 +179,13 @@ public class ProcessResourceImpl implements ProcessResource {
 
   @Override
   public synchronized InputStream getInputStream() throws IOException {
-    if (inputStreamDataCache == null) {
-      inputStreamDataCache = new TemporaryFileBackedOutputStream(32 * 1024);
-      IOUtils.copyLarge(inputStream, inputStreamDataCache);
-      streamCloser.register(inputStreamDataCache);
+    if (resourceDataCache == null) {
+      resourceDataCache = new TemporaryFileBackedOutputStream(32 * 1024);
+      IOUtils.copyLarge(inputStream, resourceDataCache);
+      IOUtils.closeQuietly(inputStream);
+      streamCloser.register(resourceDataCache);
     }
-    InputStream newInputStream = inputStreamDataCache.asByteSource().openStream();
+    InputStream newInputStream = resourceDataCache.asByteSource().openStream();
     streamCloser.register(newInputStream);
 
     return newInputStream;
@@ -203,10 +203,7 @@ public class ProcessResourceImpl implements ProcessResource {
 
   @Override
   public synchronized void close() {
-    try {
-      streamCloser.close();
-    } catch (IOException e) {
-    } // suppress exceptions
+    IOUtils.closeQuietly(streamCloser);
   }
 
   public void markAsModified() {

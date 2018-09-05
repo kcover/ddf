@@ -170,24 +170,36 @@ class ProcessResourceImplSpec extends Specification {
     }
 
     def 'test getInputStream()'(){
-        def ProcessResource = new ProcessResourceImpl(ID, inputStream, MIME_TYPE, RESOURCE_NAME, SIZE, QUALIFIER)
+        def processResource = new ProcessResourceImpl(ID, inputStream, MIME_TYPE, RESOURCE_NAME, SIZE, QUALIFIER)
 
         expect:
-        IOUtils.toByteArray(ProcessResource.getInputStream()) == inputStreamBytes
+        IOUtils.toByteArray(processResource.getInputStream()) == inputStreamBytes
     }
 
     def 'input stream can be loaded multiple times'(){
-        def ProcessResource = new ProcessResourceImpl(ID, inputStream, MIME_TYPE, RESOURCE_NAME, SIZE, QUALIFIER)
+        def processResource = new ProcessResourceImpl(ID, inputStream, MIME_TYPE, RESOURCE_NAME, SIZE, QUALIFIER)
 
         when:
-        def is1 = ProcessResource.getInputStream()
-        def is2 = ProcessResource.getInputStream()
-        def is3 = ProcessResource.getInputStream()
+        def is1 = processResource.getInputStream()
+        def is2 = processResource.getInputStream()
+        def is3 = processResource.getInputStream()
 
         then:
         byte[] is1Bytes = IOUtils.toByteArray(is1)
         is1Bytes == IOUtils.toByteArray(is2)
         is1Bytes == IOUtils.toByteArray(is3)
+    }
+
+    def 'IOException is thrown when getInputStream is called after close' () {
+        def processResource = new ProcessResourceImpl(ID, inputStream, MIME_TYPE, RESOURCE_NAME, SIZE, QUALIFIER)
+        processResource.getInputStream()
+        processResource.close()
+
+        when:
+        processResource.getInputStream()
+
+        then:
+        thrown(IOException)
     }
 
 }
