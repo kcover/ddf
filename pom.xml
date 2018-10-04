@@ -150,7 +150,8 @@
         <antlr.version>4.3</antlr.version>
         <lux.woodstox.version>4.1.1</lux.woodstox.version>
         <commons-codec.version>1.11</commons-codec.version>
-        <spring.version>5.0.4.RELEASE</spring.version>
+        <spring.version>5.0.5.RELEASE</spring.version>
+        <spring-ldap-core.version>2.3.2.RELEASE</spring-ldap-core.version>
         <xerces.bundle.version>2.11.0_1</xerces.bundle.version>
         <!-- pax.web and jetty versions are closely tied together and should be upgraded together-->
         <jetty.version>9.4.11.v20180605</jetty.version>
