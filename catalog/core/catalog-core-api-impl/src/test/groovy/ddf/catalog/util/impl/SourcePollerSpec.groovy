@@ -15,32 +15,28 @@ package ddf.catalog.util.impl
 
 import com.google.common.util.concurrent.Futures
 import com.google.common.util.concurrent.ListenableFuture
-import com.google.common.util.concurrent.ListeningExecutorService
 import ddf.catalog.source.FederatedSource
 import spock.lang.Specification
 import spock.lang.Unroll
 
 import java.util.concurrent.Callable
+import java.util.concurrent.ExecutorService
 import java.util.concurrent.ScheduledExecutorService
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.TimeoutException
 
 class SourcePollerSpec extends Specification {
 
-    private static final int SMALL_POLL_INTERVAL = 1
-
-    private static final TimeUnit SMALL_POLL_INTERVAL_TIME_UNIT = TimeUnit.SECONDS
-
-    private ListeningExecutorService sourceAvailabilityChecksThreadPool
+    private ExecutorService availabilityChecksThreadPool
 
     private ScheduledExecutorService pollAllSourcesThreadPool
 
     private SourcePoller sourcePoller
 
     def setup() {
-        sourceAvailabilityChecksThreadPool = Mock()
-        pollAllSourcesThreadPool = Mock()
-        sourcePoller = new SourcePoller(sourceAvailabilityChecksThreadPool, pollAllSourcesThreadPool, SMALL_POLL_INTERVAL, SMALL_POLL_INTERVAL_TIME_UNIT)
+        availabilityChecksThreadPool = Mock(ExecutorService)
+        pollAllSourcesThreadPool = Mock(ScheduledExecutorService)
+        sourcePoller = new SourcePoller(availabilityChecksThreadPool, pollAllSourcesThreadPool)
     }
 
     def cleanup() {
@@ -52,10 +48,11 @@ class SourcePollerSpec extends Specification {
         given:
         final FederatedSource mockFederatedSource = Mock(FederatedSource) {
             isAvailable() >> availability
+            getId() >> 'mockFederatedSourceId'
         }
         ListenableFuture<SourceStatus> future = Futures.immediateFuture(mockFederatedSource.isAvailable() ? SourceStatus.AVAILABLE : SourceStatus.UNAVAILABLE)
         pollAllSourcesThreadPool.schedule(_ as Runnable, _ as long, _ as TimeUnit) >> { Runnable r -> r }
-        sourceAvailabilityChecksThreadPool.submit(_ as Callable) >> future
+        availabilityChecksThreadPool.submit(_ as Callable) >> future
 
         when:
         sourcePoller.setFederatedSources([mockFederatedSource])
@@ -74,10 +71,11 @@ class SourcePollerSpec extends Specification {
         given:
         final FederatedSource mockFederatedSource = Mock(FederatedSource) {
             isAvailable() >> true
+            getId() >> 'mockFederatedSourceId'
         }
         ListenableFuture<SourceStatus> future = Futures.immediateFailedFuture(new TimeoutException())
         pollAllSourcesThreadPool.schedule(_ as Runnable, _ as long, _ as TimeUnit) >> { Runnable r -> r }
-        sourceAvailabilityChecksThreadPool.submit(_ as Callable) >> future
+        availabilityChecksThreadPool.submit(_ as Callable) >> future
 
         when:
         sourcePoller.setFederatedSources([mockFederatedSource])
