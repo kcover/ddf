@@ -36,7 +36,6 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
-import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.CancellationException;
 import java.util.concurrent.ExecutionException;
@@ -49,9 +48,6 @@ import java.util.concurrent.TimeoutException;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 import org.apache.commons.lang.StringUtils;
-import org.osgi.framework.Bundle;
-import org.osgi.framework.BundleContext;
-import org.osgi.framework.FrameworkUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -77,6 +73,14 @@ public class SourcePoller {
 
   private static final TimeUnit DEFAULT_POLL_INTERVAL_TIME_UNIT = TimeUnit.MINUTES;
 
+  private final ListeningExecutorService availabilityChecksThreadPool;
+
+  private final ScheduledExecutorService pollAllSourcesThreadPool;
+
+  private ScheduledFuture pollAllSourcesFuture;
+
+  private final Cache<SourceKey, SourceStatus> cache;
+
   private volatile long pollInterval = DEFAULT_POLL_INTERVAL;
 
   private volatile TimeUnit pollIntervalTimeUnit = DEFAULT_POLL_INTERVAL_TIME_UNIT;
@@ -89,17 +93,9 @@ public class SourcePoller {
 
   private volatile List<CatalogStore> catalogStores = Collections.emptyList();
 
-  private final ListeningExecutorService availabilityChecksThreadPool;
-
-  private final ScheduledExecutorService pollAllSourcesThreadPool;
-
-  private ScheduledFuture pollAllSourcesFuture;
-
-  private final Cache<SourceKey, SourceStatus> cache;
-
   public SourcePoller(
-      ExecutorService availabilityChecksThreadPool,
-      ScheduledExecutorService pollAllSourcesThreadPool) {
+      final ExecutorService availabilityChecksThreadPool,
+      final ScheduledExecutorService pollAllSourcesThreadPool) {
     this(
         availabilityChecksThreadPool,
         pollAllSourcesThreadPool,
@@ -110,8 +106,8 @@ public class SourcePoller {
   /** Starts a process to periodically call {@link #pollAllSources()} */
   @VisibleForTesting
   SourcePoller(
-      ExecutorService availabilityChecksThreadPool,
-      ScheduledExecutorService pollAllSourcesThreadPool,
+      final ExecutorService availabilityChecksThreadPool,
+      final ScheduledExecutorService pollAllSourcesThreadPool,
       final long pollInterval,
       final TimeUnit pollIntervalTimeUnit) {
     this.availabilityChecksThreadPool =
@@ -132,6 +128,114 @@ public class SourcePoller {
             .build();
 
     setPollInterval(pollInterval, pollIntervalTimeUnit);
+  }
+
+  public void destroy() {
+    MoreExecutors.shutdownAndAwaitTermination(pollAllSourcesThreadPool, 5, TimeUnit.SECONDS);
+    MoreExecutors.shutdownAndAwaitTermination(availabilityChecksThreadPool, 5, TimeUnit.SECONDS);
+  }
+
+  /**
+   * This method is a non-blocking alternative to {@link Source#isAvailable()} which provides more
+   * details about the availability than just available or unavailable.
+   *
+   * @return a {@link SourceStatus} for the {@code source}. {@link SourceStatus#UNKNOWN} if the
+   *     {@code source} is not in the cache or has not been checked yet.
+   * @throws IllegalArgumentException if the {@code source} is {@code null}
+   */
+  public SourceStatus getSourceStatus(final Source source) {
+    notNull(source);
+
+    LOGGER.trace("Getting status of source id={}", source.getId());
+    SourceStatus sourceStatus = cache.getIfPresent(new SourceKey(source));
+    if (sourceStatus == null) {
+      LOGGER.debug("getSourceStatus() called on an unregistered source id={}", source.getId());
+      return SourceStatus.UNKNOWN;
+    } else {
+      return sourceStatus;
+    }
+  }
+
+  /**
+   * @param pollIntervalMinutes the interval (in minutes) at which to recheck the availability of
+   *     the {@link Source}s
+   * @throws IllegalArgumentException if {@code pollIntervalMinutes} is less than {@code 1} or is
+   *     greater than {@link Integer#MAX_VALUE}
+   */
+  public void setPollIntervalMinutes(final long pollIntervalMinutes) {
+    final int minimumPollIntervalMinutes = 1;
+    if (pollIntervalMinutes < minimumPollIntervalMinutes) {
+      LOGGER.debug(
+          "pollIntervalMinutes argument may not be less than " + minimumPollIntervalMinutes);
+      throw new IllegalArgumentException(
+          "pollIntervalMinutes argument may not be less than " + minimumPollIntervalMinutes);
+    }
+
+    setPollInterval(pollIntervalMinutes, TimeUnit.MINUTES);
+  }
+
+  /**
+   * Sets the {@link ConnectedSource}s of which to check the availability periodically according to
+   * {@link #setPollIntervalMinutes(long)}
+   *
+   * @throws IllegalArgumentException if {@code connectedSources} is {@code null}
+   */
+  public void setConnectedSources(final List<ConnectedSource> connectedSources) {
+    notNull(connectedSources);
+
+    LOGGER.trace(
+        "Setting connected sources: old size={}, new size={}",
+        this.connectedSources.size(),
+        connectedSources.size());
+    this.connectedSources = connectedSources;
+  }
+
+  /**
+   * Sets the {@link FederatedSource}s of which to check the availability periodically according to
+   * {@link #setPollIntervalMinutes(long)}
+   *
+   * @throws IllegalArgumentException if {@code federatedSource} is {@code null}
+   */
+  public void setFederatedSources(final List<FederatedSource> federatedSources) {
+    notNull(federatedSources);
+
+    LOGGER.trace(
+        "Setting federated sources: old size={}, new size={}",
+        this.federatedSources.size(),
+        federatedSources.size());
+    this.federatedSources = federatedSources;
+  }
+
+  /**
+   * Sets the {@link CatalogProvider}s of which to check the availability periodically according to
+   * {@link #setPollIntervalMinutes(long)}
+   *
+   * @throws IllegalArgumentException if {@code catalogProvider} is {@code null}
+   */
+  public void setCatalogProviders(final List<CatalogProvider> catalogProviders) {
+    notNull(catalogProviders);
+
+    LOGGER.trace(
+        "Setting catalog providers: old size={}, new size={}",
+        this.catalogProviders.size(),
+        catalogProviders.size());
+    this.catalogProviders = catalogProviders;
+  }
+
+  /**
+   * Sets the {@link CatalogStore}s of which to check the availability periodically according to
+   * {@link #setPollIntervalMinutes(long)}
+   *
+   * @throws IllegalArgumentException if {@code catalogStore} is {@code null}
+   */
+  public void setCatalogStores(final List<CatalogStore> catalogStores) {
+    notNull(catalogStores);
+
+    LOGGER.trace(
+        "Setting catalog stores: old size={}, new size={}",
+        this.catalogStores.size(),
+        catalogStores.size());
+    this.catalogStores = catalogStores;
   }
 
   /**
@@ -219,6 +323,7 @@ public class SourcePoller {
       final SourceKey sourceKey = entry.getKey();
 
       LOGGER.trace("Starting a process to check the availability of source id={}", source.getId());
+      // TODO Do these watcher threads need to be canceled too when setPollInterval?
       Future<SourceStatus> sourceStatusFuture =
           Futures.withTimeout(
               availabilityChecksThreadPool.submit(
@@ -232,7 +337,7 @@ public class SourcePoller {
     return sourceStatusFutures;
   }
 
-  private void cacheResults(Map<SourceKey, Future<SourceStatus>> sourceStatusFutures) {
+  private void cacheResults(final Map<SourceKey, Future<SourceStatus>> sourceStatusFutures) {
     for (final Entry<SourceKey, Future<SourceStatus>> entry : sourceStatusFutures.entrySet()) {
       final Future<SourceStatus> future = entry.getValue();
       final SourceKey sourceKey = entry.getKey();
@@ -281,123 +386,6 @@ public class SourcePoller {
     pollAllSourcesFuture =
         pollAllSourcesThreadPool.scheduleAtFixedRate(
             this::pollAllSources, pollInterval, pollInterval, pollIntervalTimeUnit);
-  }
-
-  public void destroy() {
-    MoreExecutors.shutdownAndAwaitTermination(pollAllSourcesThreadPool, 5, TimeUnit.SECONDS);
-    MoreExecutors.shutdownAndAwaitTermination(availabilityChecksThreadPool, 5, TimeUnit.SECONDS);
-  }
-
-  /**
-   * This method is a non-blocking alternative to {@link Source#isAvailable()} which provides more
-   * details about the availability than just available or unavailable.
-   *
-   * @return a {@link SourceStatus} for the {@code source}. {@link SourceStatus#UNKNOWN} if the
-   *     {@code source} is not in the cache or has not been checked yet.
-   * @throws IllegalArgumentException if the {@code source} is {@code null}
-   */
-  public SourceStatus getSourceStatus(final Source source) {
-    notNull(source);
-
-    LOGGER.trace("Getting status of source id={}", source.getId());
-    SourceStatus sourceStatus = cache.getIfPresent(new SourceKey(source));
-    if (sourceStatus == null) {
-      LOGGER.debug("getSourceStatus() called on an unregistered source id={}", source.getId());
-      return SourceStatus.UNKNOWN;
-    } else {
-      return sourceStatus;
-    }
-  }
-
-  @VisibleForTesting
-  BundleContext getBundleContext() {
-    return Optional.ofNullable(FrameworkUtil.getBundle(SourcePoller.class))
-        .map(Bundle::getBundleContext)
-        .orElseThrow(
-            () ->
-                new IllegalStateException("Unable to get the bundle context for the SourcePoller"));
-  }
-
-  /**
-   * Sets the {@link ConnectedSource}s of which to check the availability periodically according to
-   * {@link #setPollIntervalMinutes(long)}
-   *
-   * @throws IllegalArgumentException if {@code connectedSources} is {@code null}
-   */
-  public void setConnectedSources(final List<ConnectedSource> connectedSources) {
-    notNull(connectedSources);
-
-    LOGGER.trace(
-        "Setting connected sources: old size={}, new size={}",
-        this.connectedSources.size(),
-        connectedSources.size());
-    this.connectedSources = connectedSources;
-  }
-
-  /**
-   * Sets the {@link FederatedSource}s of which to check the availability periodically according to
-   * {@link #setPollIntervalMinutes(long)}
-   *
-   * @throws IllegalArgumentException if {@code federatedSource} is {@code null}
-   */
-  public void setFederatedSources(final List<FederatedSource> federatedSources) {
-    notNull(federatedSources);
-
-    LOGGER.trace(
-        "Setting federated sources: old size={}, new size={}",
-        this.federatedSources.size(),
-        federatedSources.size());
-    this.federatedSources = federatedSources;
-  }
-
-  /**
-   * Sets the {@link CatalogProvider}s of which to check the availability periodically according to
-   * {@link #setPollIntervalMinutes(long)}
-   *
-   * @throws IllegalArgumentException if {@code catalogProvider} is {@code null}
-   */
-  public void setCatalogProviders(final List<CatalogProvider> catalogProviders) {
-    notNull(catalogProviders);
-
-    LOGGER.trace(
-        "Setting catalog providers: old size={}, new size={}",
-        this.catalogProviders.size(),
-        catalogProviders.size());
-    this.catalogProviders = catalogProviders;
-  }
-
-  /**
-   * Sets the {@link CatalogStore}s of which to check the availability periodically according to
-   * {@link #setPollIntervalMinutes(long)}
-   *
-   * @throws IllegalArgumentException if {@code catalogStore} is {@code null}
-   */
-  public void setCatalogStores(final List<CatalogStore> catalogStores) {
-    notNull(catalogStores);
-
-    LOGGER.trace(
-        "Setting catalog stores: old size={}, new size={}",
-        this.catalogStores.size(),
-        catalogStores.size());
-    this.catalogStores = catalogStores;
-  }
-
-  /**
-   * @param pollIntervalMinutes the interval (in minutes) at which to recheck the availability of
-   *     the {@link Source}s
-   * @throws IllegalArgumentException if {@code pollIntervalMinutes} is less than {@code 1} or is
-   *     greater than {@link Integer#MAX_VALUE}
-   */
-  public void setPollIntervalMinutes(final long pollIntervalMinutes) {
-    final int minimumPollIntervalMinutes = 1;
-    if (pollIntervalMinutes < minimumPollIntervalMinutes) {
-      LOGGER.debug(
-          "pollIntervalMinutes argument may not be less than " + minimumPollIntervalMinutes);
-      throw new IllegalArgumentException(
-          "pollIntervalMinutes argument may not be less than " + minimumPollIntervalMinutes);
-    }
-
-    setPollInterval(pollIntervalMinutes, TimeUnit.MINUTES);
   }
 
   /**

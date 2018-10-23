@@ -96,10 +96,10 @@
     </bean>
 
     <bean id="sourcePoller" class="ddf.catalog.util.impl.SourcePoller" destroy-method="destroy">
-        <cm:managed-properties persistent-id="ddf.catalog.util.impl.SourcePoller"
-                               update-strategy="container-managed"/>
         <argument ref="sourceAvailabilityChecksThreadPool"/>
         <argument ref="pollAllSourcesThreadPool"/>
+        <cm:managed-properties persistent-id="ddf.catalog.util.impl.SourcePoller"
+                               update-strategy="container-managed"/>
         <property name="connectedSources" ref="connectedSources"/>
         <property name="federatedSources" ref="federatedSources"/>
         <property name="catalogProviders" ref="catalog"/>
