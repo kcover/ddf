@@ -77,14 +77,6 @@ public class SourcePoller {
 
   private static final TimeUnit DEFAULT_POLL_INTERVAL_TIME_UNIT = TimeUnit.MINUTES;
 
-  private static final int DEFAULT_TIMEOUT = 30;
-
-  private static final TimeUnit DEFAULT_TIMEOUT_TIME_UNIT = TimeUnit.SECONDS;
-
-  private long timeout = DEFAULT_TIMEOUT;
-
-  private TimeUnit timeoutTimeUnit = DEFAULT_TIMEOUT_TIME_UNIT;
-
   private volatile long pollInterval = DEFAULT_POLL_INTERVAL;
 
   private volatile TimeUnit pollIntervalTimeUnit = DEFAULT_POLL_INTERVAL_TIME_UNIT;
@@ -112,9 +104,7 @@ public class SourcePoller {
         availabilityChecksThreadPool,
         pollAllSourcesThreadPool,
         DEFAULT_POLL_INTERVAL,
-        DEFAULT_POLL_INTERVAL_TIME_UNIT,
-        DEFAULT_TIMEOUT,
-        DEFAULT_TIMEOUT_TIME_UNIT);
+        DEFAULT_POLL_INTERVAL_TIME_UNIT);
   }
 
   /** Starts a process to periodically call {@link #pollAllSources()} */
@@ -123,21 +113,10 @@ public class SourcePoller {
       ExecutorService availabilityChecksThreadPool,
       ScheduledExecutorService pollAllSourcesThreadPool,
       final long pollInterval,
-      final TimeUnit pollIntervalTimeUnit,
-      final long timeout,
-      final TimeUnit timeoutTimeUnit) {
+      final TimeUnit pollIntervalTimeUnit) {
     this.availabilityChecksThreadPool =
         MoreExecutors.listeningDecorator(availabilityChecksThreadPool);
     this.pollAllSourcesThreadPool = pollAllSourcesThreadPool;
-
-    LOGGER.debug(
-        "Scheduling ExecutorService at fixed rate of {} {} with an initial delay of {}",
-        pollInterval,
-        pollIntervalTimeUnit,
-        pollInterval);
-    pollAllSourcesFuture =
-        pollAllSourcesThreadPool.scheduleAtFixedRate(
-            this::pollAllSources, pollInterval, pollInterval, pollIntervalTimeUnit);
 
     cache =
         CacheBuilder.newBuilder()
@@ -152,9 +131,7 @@ public class SourcePoller {
                 })
             .build();
 
-    this.pollInterval = pollInterval;
-    this.pollIntervalTimeUnit = pollIntervalTimeUnit;
-    setTimeout(timeout, timeoutTimeUnit);
+    setPollInterval(pollInterval, pollIntervalTimeUnit);
   }
 
   /**
@@ -167,7 +144,7 @@ public class SourcePoller {
    * <p>A process to check (or recheck) and cache the availability of each {@link Source} is
    * performed.
    */
-  public void pollAllSources() {
+  private synchronized void pollAllSources() {
     try {
       final List<Source> sources =
           Stream.of(connectedSources, federatedSources, catalogProviders, catalogStores)
@@ -246,8 +223,8 @@ public class SourcePoller {
           Futures.withTimeout(
               availabilityChecksThreadPool.submit(
                   () -> source.isAvailable() ? SourceStatus.AVAILABLE : SourceStatus.UNAVAILABLE),
-              DEFAULT_TIMEOUT,
-              DEFAULT_TIMEOUT_TIME_UNIT,
+              pollInterval,
+              pollIntervalTimeUnit,
               pollAllSourcesThreadPool);
       sourceStatusFutures.put(sourceKey, sourceStatusFuture);
     }
@@ -287,16 +264,20 @@ public class SourcePoller {
     LOGGER.trace("Cache updated with new source availabilities");
   }
 
-  public void setTimeout(long timeout, TimeUnit timeoutTimeUnit) {
-    this.timeout = timeout;
-    this.timeoutTimeUnit = timeoutTimeUnit;
-  }
-
   private void setPollInterval(final long pollInterval, final TimeUnit pollIntervalTimeUnit) {
     this.pollInterval = pollInterval;
     this.pollIntervalTimeUnit = pollIntervalTimeUnit;
 
-    pollAllSourcesFuture.cancel(false);
+    LOGGER.debug(
+        "Scheduling ExecutorService at fixed rate of {} {} with an initial delay of {}",
+        pollInterval,
+        pollIntervalTimeUnit,
+        pollInterval);
+
+    if (pollAllSourcesFuture != null) {
+      pollAllSourcesFuture.cancel(false);
+    }
+
     pollAllSourcesFuture =
         pollAllSourcesThreadPool.scheduleAtFixedRate(
             this::pollAllSources, pollInterval, pollInterval, pollIntervalTimeUnit);
@@ -304,7 +285,6 @@ public class SourcePoller {
 
   public void destroy() {
     MoreExecutors.shutdownAndAwaitTermination(pollAllSourcesThreadPool, 5, TimeUnit.SECONDS);
-
     MoreExecutors.shutdownAndAwaitTermination(availabilityChecksThreadPool, 5, TimeUnit.SECONDS);
   }
 
